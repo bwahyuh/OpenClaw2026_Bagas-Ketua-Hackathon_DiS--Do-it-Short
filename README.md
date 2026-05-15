@@ -1,130 +1,175 @@
-# DiS Protocol — Do It Short
-> *One topic. One link. Agents handle the rest.*
+# DiS Protocol — Setup Guide
+
+This guide will get **DiS: Do It Short** running on your local machine (Windows/macOS/Linux).  
+No extra files needed — copy this into your README if you want.
 
 ---
 
-## Inspiration
+## Requirements
 
-Short-form video is where attention lives—but making it still feels like running a small studio alone: write a hook, storyboard scenes, generate visuals, record voiceover, add captions, reframe for TikTok/Reels, and hope nothing breaks mid-export. We built **DiS Protocol (Do It Short)** because we wanted that entire chain to feel like working with a team of AI agents, not clicking through a fragile wizard.
-
-The spark came from two everyday creator pains we kept seeing:
-1. *"I have a topic but no time to produce"*
-2. *"I have a long YouTube video but no time to find the clips."*
-
-Hackathons like OpenClaw pushed us to think beyond single API calls—toward specialized agents (script, visual, voice, caption, clip intelligence) coordinated behind one calm interface. We also took cues from high-polish canvas workflows (scene-by-scene control, glass UI, viral presets) and asked: **What if export-ready shorts were the default, and human creativity only shows up where it actually matters?**
-
----
-
-## What It Does
-
-DiS is a **multi-agent short-video studio** with two core modes:
-
-### 🎬 Create
-Choose a viral preset (storytelling, affiliate, kids, education, horror, and more), platform, aspect ratio, visual style, tone, and narrator. Autonomous agents then produce a full project:
-
-- Structured script with marketing metadata
-- Per-scene narration and image prompts
-- AI-generated scene art (with optional character/product reference for consistency)
-- Synthesized voice
-- Burned-in captions
-- Stitched MP4
-
-After generation, the **Scene Editor** lets you regenerate image or voice per scene, edit narration and visual prompts, and rebuild the final video without starting over.
-
-### ✂️ Clip
-Paste a YouTube link. Agents:
-- Ingest the source & transcribe speech
-- Rank the top three **40–60 second segments** with viral scores and reasoning
-- Detect faces for smart vertical layout
-- Export reframed **9:16 clips** ready for Shorts/Reels/TikTok
-
-> From the outside it should feel mature and parallel—one intent in, publishable shorts out—not a visible "Step 1 of 7" factory line.
+| Tool | Version | Required? |
+|---|---|---|
+| **Node.js** | 18+ (20 LTS recommended) | Yes |
+| **npm** | 9+ | Yes |
+| **FFmpeg** | Auto-bundled via `ffmpeg-static` | Yes (bundled) |
+| **yt-dlp** | Latest | Yes, for Clip feature |
+| **Google Gemini API key** | — | Yes (Create: image gen + TTS; script fallback) |
+| **Groq API key** | — | Highly recommended (script, Clip + Whisper) |
 
 ---
 
-## How We Built It
+## 1. Clone & Install
 
-**Frontend:** React 19 + Vite, Motion for UI, Tailwind/shadcn-style glass components. Views include Landing, Create (with viral ideas modal), Create Scene Editor, Clip, Projects, Editor, and Settings.
+```bash
+git clone <repo-url>
+cd OpenclawHackaton-DiS
+npm install
+```
 
-**Backend:** Express (`tsx server.ts`) orchestrates jobs, serves assets, and persists projects under `generated/` and `projects/`.
+---
 
-### Agent-Style Pipelines (Server-Side)
+## 2. Environment Variables
 
-| Agent Role | Responsibility |
+Create a `.env` file in the project root (you can copy from `.env.example`, then replace all keys with your own — **never commit keys to Git**).
+
+```env
+# Required for image generation, TTS, and script fallback
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Recommended: faster scripts, viral ideas, and the full Clip pipeline
+GROQ_API_KEY=your_groq_api_key_here
+GROQ_MODEL=llama-3.3-70b-versatile
+GROQ_WHISPER_MODEL=whisper-large-v3-turbo
+
+# Optional — only if yt-dlp is not found on PATH (common on Windows)
+# YT_DLP_PATH=C:\path\to\yt-dlp.exe
+
+# Optional — only if using a system FFmpeg manually
+# FFMPEG_PATH=C:\path\to\ffmpeg.exe
+```
+
+> **API Priority:**
+> - **Create (script & viral ideas):** uses Groq if `GROQ_API_KEY` is set; falls back to Gemini otherwise.
+> - **Create (images & voice):** Gemini (+ Pollinations fallback for images, Edge TTS fallback for voice).
+> - **Clip:** requires Groq for Whisper transcription and viral segment ranking.
+
+`.env.local` is also read and will override `.env`.
+
+---
+
+## 3. Install yt-dlp (for Clip)
+
+**Windows (winget)**
+```bash
+winget install yt-dlp
+```
+After installing, close and reopen your terminal, then verify:
+```bash
+yt-dlp --version
+```
+If it's still not recognized, set the full path in `.env`:
+```env
+YT_DLP_PATH=C:\Users\<YOU>\AppData\Local\Microsoft\WinGet\Packages\yt-dlp.yt-dlp_...\yt-dlp.exe
+```
+
+**macOS**
+```bash
+brew install yt-dlp
+```
+
+**Linux**
+```bash
+sudo apt install yt-dlp
+# or: pip install -U yt-dlp
+```
+
+---
+
+## 4. Run Development Server
+
+```bash
+npm run dev
+```
+
+Server + Vite run together at: **http://localhost:3000**
+
+You should see something like this in your terminal:
+```
+[SYSTEM] Command Center online at http://localhost:3000
+```
+
+---
+
+## 5. Production Build (Optional)
+
+```bash
+npm run build
+npm start
+```
+
+Set `NODE_ENV=production` so Express serves the `dist/` folder instead of the Vite dev middleware.
+
+---
+
+## 6. Quick Usage
+
+1. Open **http://localhost:3000**
+2. Sign in via the app's dummy auth (stored in `localStorage`)
+3. **Create** — enter a topic, preset, and style → Generate → edit per scene in the Scene Editor
+4. **Clip** — paste a YouTube URL → enter your Groq API key as the access token (same as `GROQ_API_KEY` on the server) → process clips
+
+---
+
+## 7. Auto-Generated Folders
+
+| Folder | Contents |
 |---|---|
-| **Script / Strategy** | JSON script: scenes, narration, visual prompts, thumbnail, tags |
-| **Visual** | Multi-provider image gen with rotation + reference images |
-| **Voice** | Gemini TTS with model rotation; Edge TTS fallback |
-| **Caption** | FFmpeg drawtext burn-in from scene narration |
-| **Clip Intelligence** | Whisper transcript → LLM ranks hooks → FFmpeg vertical render |
-| **Layout** | TensorFlow.js + MediaPipe face detection for crop strategy |
+| `generated/` | Video projects (`DIS-xxxx/`), scene assets, `output.mp4` |
+| `projects_cache/` | Project metadata JSON |
+| `clip_cache/` | YouTube downloads & clip outputs |
 
-**Resilience layer:** When one model hits quota or 404, the orchestrator tries the next candidate (images, TTS) or falls back to Pollinations / Edge TTS so the user still gets a real output—not a dead pipeline.
-
-**Media stack:** FFmpeg for assembly/concat/subtitles/clips, Sharp for images, yt-dlp for YouTube ingest.
-
-**Primary APIs:** Google Gemini (`@google/genai`), optional Groq (Llama 3.3 70B for script/ranking, Whisper for transcription).
-
-### Clip Ranking Constraint
-
-Each recommended segment must satisfy:
-
-$$40 \leq t_{end} - t_{start} \leq 60 \text{ (seconds)}$$
-
-Each recommended segment should be a complete narrative arc, not a mid-sentence cut.
+> These can be cleared from **Settings → Storage** inside the app.
 
 ---
 
-## Challenges We Ran Into
+## 8. Troubleshooting
 
-- **API quotas and model availability** — Gemini image and TTS models hit free-tier limits quickly. Early builds stopped at the first failure; we had to implement rotation, discovery via `ListModels`, and fallbacks (Pollinations for images, Edge TTS for voice).
-
-- **Wrong or deprecated model IDs** — e.g. `gemini-2.5-flash-image-preview` returning 404. We maintained blocklists and candidate lists aligned with what actually works on `v1beta`.
-
-- **Imagen on free accounts** — Imagen 4 required a paid plan; the pipeline had to skip gracefully instead of blocking generation.
-
-- **"Images work, captions don't"** — Scene clips were image + audio only; narration existed for TTS but never appeared on video. Fixing it meant a dedicated caption path (text files + FFmpeg burn-in) on create and rebuild/regen flows.
-
-- **Regenerate felt broken** — Users saw placeholders when all image providers failed; improving the same fallback chain for per-scene regen was essential for trust in the Scene Editor.
-
-- **Clip pipeline dependencies** — yt-dlp/FFmpeg paths on Windows, long downloads, and transcript size limits for LLM ranking all required defensive error messages and truncation.
-
-- **UX vs. automation** — Letting users stay on Create with a scene editor (instead of auto-jumping to a generic editor) while still feeling "agent-complete" took several iterations.
+| Issue | Fix |
+|---|---|
+| `GEMINI_API_KEY is not configured` | Add `GEMINI_API_KEY` to `.env`, restart `npm run dev` |
+| Placeholder images / generation failed | Check Gemini quota; pipeline will try other models + Pollinations |
+| Voice generation failed | Gemini TTS quota hit → auto-fallback to Edge TTS |
+| Clip: `yt-dlp is not on PATH` | Install yt-dlp or set `YT_DLP_PATH` in `.env` |
+| Clip: transcription failed | Make sure `GROQ_API_KEY` is valid |
+| Imagen not working | Expected on free tier; pipeline skips Imagen gracefully |
+| `.env` changes not applying | Stop the server (`Ctrl+C`), run `npm run dev` again |
 
 ---
 
-## Accomplishments We're Proud Of
+## 9. npm Scripts
 
-- A dual-mode product (generate from scratch and repurpose long video) in one cohesive DiS experience—not two disconnected demos.
-- Agent orchestration with real failover so generation usually completes even when a single model is down or quota-blocked.
-- Scene-level control after automation: edit copy, regen image/voice, rebuild final MP4 without rerunning the entire project.
-- Face-aware vertical clipping for repurposed content—not just center crop.
-- End-to-end export: captioned scene clips, concatenated output, project library, storage visibility in Settings.
-- A polished, English-first UI (viral ideas, voice preview, glass iOS-style scene editor) that matches the ambition of the backend.
-
----
-
-## What We Learned
-
-- **Short-form video is an orchestration problem**, not a single-model prompt. Reliability comes from small specialized steps with clear JSON contracts between them.
-- **Fallbacks are a feature, not an embarrassment**—creators care that something ships today.
-- **Captions and audio are half the product**; beautiful frames without readable subtitles feel unfinished on TikTok/Reels.
-- **Reference images materially improve continuity** for affiliate and character-driven stories—but only if the visual agent path consistently uses them.
-- **Perceived parallelism matters**: even when some work is sequential on the server, the product narrative should feel like agents collaborating, not a loading bar through a script.
-- **Platform reality** (Windows paths, yt-dlp installs, FFmpeg filters) is as important as picking the newest Gemini model name.
+| Command | Description |
+|---|---|
+| `npm run dev` | Dev server (Express + Vite) on port 3000 |
+| `npm run build` | Build frontend + bundle server |
+| `npm start` | Run production build (`dist/server.cjs`) |
+| `npm run lint` | Type check (`tsc --noEmit`) |
 
 ---
 
-## What's Next for DiS
+## 10. Where to Get API Keys
 
-- **True parallel agent execution** — script, thumbnail, and scene batch generation with shared memory for character/style bible.
-- **Editor subtitle styles wired to export** (cinematic, popup, karaoke) instead of UI-only toggles.
-- **Motion Agent** — apply `motion_id` (zoom, pan, Ken Burns) in FFmpeg or canvas compositing per scene.
-- **Clip Agent v2** — auto-post hooks, A/B title variants, and platform-specific aspect exports in one job.
-- **OpenClaw-native orchestration** — deeper integration with the OpenClaw agent runtime for tool calling, memory, and multi-session projects.
-- **Collaboration** — shared projects, brand kits, and template libraries for teams and agencies.
-- **Analytics loop** — optional feedback from published performance to tune hook-ranking prompts over time.
+- **Gemini:** [Google AI Studio](https://aistudio.google.com)
+- **Groq:** [Groq Console](https://console.groq.com)
 
 ---
 
-*DiS Protocol — Do It Short. One topic. One link. Agents handle the rest.*
+## ⚡ Quick Start
+
+```bash
+npm install
+cp .env.example .env   # then fill in your keys
+winget install yt-dlp  # Windows only, for Clip
+npm run dev
+# open http://localhost:3000
+```
